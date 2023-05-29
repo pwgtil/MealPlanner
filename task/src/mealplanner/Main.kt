@@ -1,4 +1,5 @@
 package mealplanner
+
 import java.sql.Connection
 import java.sql.DriverManager
 
@@ -68,7 +69,7 @@ fun getMealsFromDV(connection: Connection): List<Meal> {
     val statement = connection.createStatement()
     val mealsRS = statement.executeQuery("select * from meals")
     val mealsStructured = mutableMapOf<Int, Meal>()
-    while (mealsRS.next()){
+    while (mealsRS.next()) {
         val id = mealsRS.getInt("meal_id")
         val category = mealsRS.getString("category")
         val name = mealsRS.getString("meal")
@@ -84,7 +85,7 @@ fun getMealsFromDV(connection: Connection): List<Meal> {
 }
 
 fun showMeals(meals: List<Meal>) {
-    if (meals.size == 0) {
+    if (meals.isEmpty()) {
         TXT_NO_MEALS.let(::println)
     } else {
         println()
