@@ -19,7 +19,7 @@ val VALID_OPS = listOf("add", "show", "exit")
 val VALID_CATEGORIES = listOf("breakfast", "lunch", "dinner")
 
 fun main() {
-    val connection = createDB()
+    val connection = connectDB()
     while (true) {
         TXT_CHOSE_OPERATION.let(::println)
         val operation = readln()
@@ -44,7 +44,7 @@ fun main() {
     }
 }
 
-fun createDB(): Connection {
+fun connectDB(): Connection {
     val connection = DriverManager.getConnection("jdbc:sqlite:meals.db")
     val statement = connection.createStatement()
 //    statement.executeUpdate("drop table if exists meals")
