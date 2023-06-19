@@ -3,7 +3,7 @@ package mealplanner
 import java.sql.Connection
 import java.sql.DriverManager
 
-const val TXT_CHOSE_OPERATION = "What would you like to do (add, show, exit)?"
+const val TXT_CHOSE_OPERATION = "What would you like to do (add, show, plan, exit)?"
 const val TXT_CHOOSE_CATEGORY_TO_ADD = "Which meal do you want to add (breakfast, lunch, dinner)?"
 const val TXT_CHOOSE_CATEGORY_TO_SHOW = "Which category do you want to print (breakfast, lunch, dinner)?"
 const val TXT_INPUT_NAME = "Input the meal's name:"
@@ -16,8 +16,20 @@ const val TXT_BYE = "Bye!"
 const val TXT_MEAL_WRONG_FORMAT = "Wrong format. Use letters only!"
 const val TXT_MEAL_WRONG_CATEGORY = "Wrong meal category! Choose from: breakfast, lunch, dinner."
 const val TXT_NO_MEALS = "No meals found."
-val VALID_OPS = listOf("add", "show", "exit", "admin")
+const val TXT_CHOOSE_FROM_LIST_ABOVE = "Choose the %s for %s from the list above:"
+const val TXT_MEALS_PLANNED_FOR_DAY = "Yeah! We planned the meals for %s."
+const val TXT_MEAL_DONT_EXIST = "This meal doesn’t exist. Choose a meal from the list above."
+val VALID_OPS = listOf("add", "show", "exit", "plan", "admin")
 val VALID_CATEGORIES = listOf("breakfast", "lunch", "dinner")
+val DAYS_OF_WEEK = mapOf(
+    0 to "Monday",
+    1 to "Tuesday",
+    2 to "Wednesday",
+    3 to "Thursday",
+    4 to "Friday",
+    5 to "Saturday",
+    6 to "Sunday"
+)
 
 fun main() {
     var connection = connectDB()
@@ -32,7 +44,7 @@ fun main() {
             }
 
             VALID_OPS[1] -> { // SHOW
-                val meals = getMealsFromDV(connection)
+                val meals = getMealsFromDVbyCategory(connection)
                 showMeals(meals)
             }
 
@@ -42,18 +54,63 @@ fun main() {
                 break
             }
 
-            VALID_OPS[3] -> { // ADMIN - drop DB
+            VALID_OPS[3] -> { // PLAN
+                val meals = getMealsFromDV(connection)
+                val plan: List<Plan> = addPlan(meals)
+                showCurrentPlan(plan)
+//                addPlanToDB(plan)
+            }
+
+            VALID_OPS[4] -> { // ADMIN - drop DB
                 connection = dropAndCreateDB()
             }
         }
     }
 }
 
+fun addPlanToDB(plan: List<Plan>) {
+    // TODO: Implement save to DB
+}
+
+fun showCurrentPlan(plan: List<Plan>) {
+    plan.forEach {
+        DAYS_OF_WEEK[it.day].let(::println)
+        for (i in 0..2) {
+            String.format("%s: %s", VALID_CATEGORIES[0], it.meals[0]).let(::println)
+        }
+        println()
+    }
+}
+
+fun addPlan(meals: List<Meal>): List<Plan> {
+    val schedule = mutableListOf<Plan>()
+    for (day in DAYS_OF_WEEK) {
+        day.value.let(::println)
+        val plan = Plan(day.key, mutableListOf())
+        for (i in 0..2) {
+            meals.filter { it.category == VALID_CATEGORIES[i] }.forEach { it.name.let(::println) }
+            String.format(TXT_CHOOSE_FROM_LIST_ABOVE, VALID_CATEGORIES[1], day.value).let(::println)
+            var selectedMeal = ""
+            while (true) {
+                selectedMeal = readln()
+                if (selectedMeal in meals.filter { it.category == VALID_CATEGORIES[i] }.map { it.name })
+                    break
+                TXT_MEAL_DONT_EXIST.let(::println)
+            }
+            plan.meals.add(meals.find { it.name == selectedMeal && it.category == VALID_CATEGORIES[i] }!!) // assured above
+        }
+        schedule.add(plan)
+        String.format(TXT_MEALS_PLANNED_FOR_DAY, day.value).let(::println).also(::println)
+    }
+    return schedule.toList()
+}
+
 fun connectDB(): Connection {
     val connection = DriverManager.getConnection("jdbc:sqlite:meals.db")
     val statement = connection.createStatement()
-    statement.executeUpdate("create table if not exists meals (category text, meal text, meal_id integer)")
-    statement.executeUpdate("create table if not exists ingredients (ingredient text, ingredient_id integer, meal_id integer)")
+    statement.executeUpdate("create table if not exists meals (meal_id integer primary key, category text, meal text)")
+    statement.executeUpdate("create table if not exists ingredients (ingredient text, ingredient_id integer, meal_id integer, foreign key (meal_id) references meals(meal_id))")
+    statement.executeUpdate("create table if not exists plan (day_of_week integer, meal_id integer, foreign key (meal_id) references meals(meal_id))")
     return connection
 }
 
@@ -62,28 +119,34 @@ fun dropAndCreateDB(): Connection {
     val statement = connection.createStatement()
     statement.executeUpdate("drop table if exists meals")
     statement.executeUpdate("drop table if exists ingredients")
-    statement.executeUpdate("create table meals (category text, meal text, meal_id integer)")
-    statement.executeUpdate("create table ingredients (ingredient text, ingredient_id integer, meal_id integer)")
+    statement.executeUpdate("drop table if exists plan")
+    statement.executeUpdate("create table meals (meal_id integer primary key, category text, meal text)")
+    statement.executeUpdate("create table ingredients (ingredient text, ingredient_id integer, meal_id integer, foreign key (meal_id) references meals(meal_id))")
+    statement.executeUpdate("create table plan (day_of_week integer, meal_id integer, foreign key (meal_id) references meals(meal_id))")
     return connection
 }
 
 fun addMealToDB(meal: Meal, connection: Connection) {
     val statement = connection.createStatement()
     val lastID = statement.executeQuery("select max(meal_id) from meals").getInt("max(meal_id)")
-    statement.executeUpdate("insert into meals values('${meal.category}', '${meal.name}', ${lastID + 1})")
+    statement.executeUpdate("insert into meals values(${lastID + 1}, '${meal.category}', '${meal.name}')")
     meal.ingredients.forEachIndexed { i, s ->
         statement.executeUpdate("insert into ingredients values('${s}', '$i', ${lastID + 1})")
     }
 }
 
-fun getMealsFromDV(connection: Connection): List<Meal> {
-    val category = categoryFormatCheck(TXT_CHOOSE_CATEGORY_TO_SHOW, TXT_MEAL_WRONG_CATEGORY)
+fun getMealsFromDV(connection: Connection, mealCategory: String? = null): List<Meal> {
     val statement = connection.createStatement()
-    val mealsRS = statement.executeQuery("select * from meals where category = '$category'")
+    val query = String.format(
+        "select * from meals%s", if (mealCategory != null) {
+            " where category = '$mealCategory'"
+        } else ""
+    )
+    val mealsRS = statement.executeQuery(query)
     val mealsStructured = mutableMapOf<Int, Meal>()
     while (mealsRS.next()) {
         val id = mealsRS.getInt("meal_id")
-//        val category = mealsRS.getString("category")
+        val category = mealsRS.getString("category")
         val name = mealsRS.getString("meal")
         val ingStatement = connection.createStatement()
         val ingredientsRS = ingStatement.executeQuery("select * from ingredients where meal_id = '$id'")
@@ -94,6 +157,11 @@ fun getMealsFromDV(connection: Connection): List<Meal> {
         mealsStructured[id] = Meal(category, name, ingredients)
     }
     return mealsStructured.values.toList()
+}
+
+fun getMealsFromDVbyCategory(connection: Connection): List<Meal> {
+    val category = categoryFormatCheck(TXT_CHOOSE_CATEGORY_TO_SHOW, TXT_MEAL_WRONG_CATEGORY)
+    return getMealsFromDV(connection, category)
 }
 
 fun showMeals(meals: List<Meal>) {
@@ -156,3 +224,4 @@ fun ingredientsFormatCheck(): List<String> {
 }
 
 data class Meal(val category: String, val name: String, val ingredients: List<String>)
+data class Plan(val day: Int, val meals: MutableList<Meal>)
