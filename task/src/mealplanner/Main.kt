@@ -76,7 +76,7 @@ fun showCurrentPlan(plan: List<Plan>) {
     plan.forEach {
         DAYS_OF_WEEK[it.day].let(::println)
         for (i in 0..2) {
-            String.format("%s: %s", VALID_CATEGORIES[0], it.meals[0]).let(::println)
+            String.format("%s: %s", VALID_CATEGORIES[i], it.meals[i].name).let(::println)
         }
         println()
     }
@@ -88,9 +88,9 @@ fun addPlan(meals: List<Meal>): List<Plan> {
         day.value.let(::println)
         val plan = Plan(day.key, mutableListOf())
         for (i in 0..2) {
-            meals.filter { it.category == VALID_CATEGORIES[i] }.forEach { it.name.let(::println) }
-            String.format(TXT_CHOOSE_FROM_LIST_ABOVE, VALID_CATEGORIES[1], day.value).let(::println)
-            var selectedMeal = ""
+            meals.filter { it.category == VALID_CATEGORIES[i] }.sortedBy { it.name }.forEach { it.name.let(::println) }
+            String.format(TXT_CHOOSE_FROM_LIST_ABOVE, VALID_CATEGORIES[i], day.value).let(::println)
+            var selectedMeal: String
             while (true) {
                 selectedMeal = readln()
                 if (selectedMeal in meals.filter { it.category == VALID_CATEGORIES[i] }.map { it.name })
@@ -100,7 +100,7 @@ fun addPlan(meals: List<Meal>): List<Plan> {
             plan.meals.add(meals.find { it.name == selectedMeal && it.category == VALID_CATEGORIES[i] }!!) // assured above
         }
         schedule.add(plan)
-        String.format(TXT_MEALS_PLANNED_FOR_DAY, day.value).let(::println).also(::println)
+        String.format(TXT_MEALS_PLANNED_FOR_DAY, day.value).let(::println).also { println() }
     }
     return schedule.toList()
 }
@@ -199,10 +199,10 @@ fun categoryFormatCheck(message: String, errorMsg: String): String {
 }
 
 fun nameFormatCheck(): String {
-    val regex = "[a-zA-Z]*".toRegex()
+    val regex = "[a-zA-Z ]*".toRegex()
     while (true) {
         TXT_INPUT_NAME.let(::println)
-        val input = readln()
+        val input = readln().trim()
         if (input.matches(regex) && input != "") return input
         else TXT_MEAL_WRONG_FORMAT.let(::println)
     }
