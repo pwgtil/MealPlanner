@@ -1,5 +1,6 @@
 package mealplanner
 
+import java.io.FileWriter
 import java.sql.Connection
 import java.sql.DriverManager
 
@@ -21,6 +22,7 @@ const val TXT_MEALS_PLANNED_FOR_DAY = "Yeah! We planned the meals for %s."
 const val TXT_MEAL_DONT_EXIST = "This meal doesn’t exist. Choose a meal from the list above."
 const val TXT_UNABLE_TO_SAVE_PLAN = "This meal doesn’t exist. Choose a meal from the list above."
 const val TXT_PLAN_FILE_SAVED = "This meal doesn’t exist. Choose a meal from the list above."
+const val TXT_INPUT_FILE_NAME = "Input a filename:"
 val VALID_OPS = listOf("add", "show", "exit", "plan", "save", "admin")
 val VALID_CATEGORIES = listOf("breakfast", "lunch", "dinner")
 val DAYS_OF_WEEK = mapOf(
@@ -60,13 +62,12 @@ fun main() {
                 val meals = getMealsFromDB(connection)
                 val plan: List<Plan> = addPlan(meals)
                 showCurrentPlan(plan)
-//                addPlanToDB(plan)
+                addPlanToDB(connection, plan)
             }
 
             VALID_OPS[5] -> { // SAVE
-                // TODO: add save logic
-                val plan: List<Plan>? = getPlanFromDB(connection)
-                savePlanToFile(plan)
+                val shoppingList = getShoppingListFromDB(connection)
+                savePlanToFile(shoppingList)
             }
 
             VALID_OPS[5] -> { // ADMIN - drop DB
@@ -76,22 +77,51 @@ fun main() {
     }
 }
 
-fun savePlanToFile(plan: List<Plan>?) {
-    if (plan == null) {
+fun savePlanToFile(shoppingList: Map<String, Int>?) {
+    if (shoppingList == null) {
         TXT_UNABLE_TO_SAVE_PLAN.let(::println)
     } else {
         // TODO: implement logic
+        TXT_INPUT_FILE_NAME.let(::println)
+        val filename = readln()
+        val fileContent = StringBuilder()
+        shoppingList.forEach {
+            fileContent.append(it.key + if (it.value > 1) " x${it.value}\n" else "\n")
+        }
+        FileWriter(filename).use {
+            it.write(fileContent.toString())
+        }
         TXT_PLAN_FILE_SAVED.let(::println)
     }
 }
 
-fun getPlanFromDB(connection: Connection): List<Plan>? {
-    // todo: implement logic
-    return null
+fun getShoppingListFromDB(connection: Connection): Map<String, Int>? {
+    val statement = connection.createStatement()
+    val planCheckSum =
+        statement.executeQuery("select sum(distinct day_of_week) from plan").getInt("sum(distinct day_of_week)")
+    return if (planCheckSum != 21) {
+        null
+    } else {
+        val ingredientsQuery =
+            statement.executeQuery("select ingredient from ingredients inner join plan on ingredients.meal_id = plan.meal_id")
+        val allIngredients = mutableListOf<String>()
+        while (ingredientsQuery.next()) {
+            allIngredients.add(ingredientsQuery.getString("ingredient"))
+        }
+        allIngredients.groupingBy { it }.eachCount().toSortedMap()
+    }
 }
 
-fun addPlanToDB(plan: List<Plan>) {
-    // TODO: Implement save to DB
+fun addPlanToDB(connection: Connection, plan: List<Plan>) {
+    val statement = connection.createStatement()
+    statement.executeUpdate("DELETE FROM plan")
+    val values = StringBuilder()
+    plan.forEach { day ->
+        day.meals.forEach { meal ->
+            values.append("(${day.day}, ${meal.id}),")
+        }
+    }
+    statement.executeUpdate("insert into plan (day_of_week, meal_id) values ${values.toString().trim(',')}")
 }
 
 fun showCurrentPlan(plan: List<Plan>) {
@@ -176,7 +206,7 @@ fun getMealsFromDB(connection: Connection, mealCategory: String? = null): List<M
         while (ingredientsRS.next()) {
             ingredients.add(ingredientsRS.getString("ingredient"))
         }
-        mealsStructured[id] = Meal(category, name, ingredients)
+        mealsStructured[id] = Meal(category, name, ingredients, id)
     }
     return mealsStructured.values.toList()
 }
@@ -245,5 +275,5 @@ fun ingredientsFormatCheck(): List<String> {
     }
 }
 
-data class Meal(val category: String, val name: String, val ingredients: List<String>)
+data class Meal(val category: String, val name: String, val ingredients: List<String>, val id: Int = Int.MAX_VALUE)
 data class Plan(val day: Int, val meals: MutableList<Meal>)
