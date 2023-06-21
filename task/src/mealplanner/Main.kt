@@ -3,7 +3,7 @@ package mealplanner
 import java.sql.Connection
 import java.sql.DriverManager
 
-const val TXT_CHOSE_OPERATION = "What would you like to do (add, show, plan, exit)?"
+const val TXT_CHOSE_OPERATION = "What would you like to do (add, show, plan, save, exit)?"
 const val TXT_CHOOSE_CATEGORY_TO_ADD = "Which meal do you want to add (breakfast, lunch, dinner)?"
 const val TXT_CHOOSE_CATEGORY_TO_SHOW = "Which category do you want to print (breakfast, lunch, dinner)?"
 const val TXT_INPUT_NAME = "Input the meal's name:"
@@ -19,7 +19,9 @@ const val TXT_NO_MEALS = "No meals found."
 const val TXT_CHOOSE_FROM_LIST_ABOVE = "Choose the %s for %s from the list above:"
 const val TXT_MEALS_PLANNED_FOR_DAY = "Yeah! We planned the meals for %s."
 const val TXT_MEAL_DONT_EXIST = "This meal doesn’t exist. Choose a meal from the list above."
-val VALID_OPS = listOf("add", "show", "exit", "plan", "admin")
+const val TXT_UNABLE_TO_SAVE_PLAN = "This meal doesn’t exist. Choose a meal from the list above."
+const val TXT_PLAN_FILE_SAVED = "This meal doesn’t exist. Choose a meal from the list above."
+val VALID_OPS = listOf("add", "show", "exit", "plan", "save", "admin")
 val VALID_CATEGORIES = listOf("breakfast", "lunch", "dinner")
 val DAYS_OF_WEEK = mapOf(
     0 to "Monday",
@@ -55,17 +57,37 @@ fun main() {
             }
 
             VALID_OPS[3] -> { // PLAN
-                val meals = getMealsFromDV(connection)
+                val meals = getMealsFromDB(connection)
                 val plan: List<Plan> = addPlan(meals)
                 showCurrentPlan(plan)
 //                addPlanToDB(plan)
             }
 
-            VALID_OPS[4] -> { // ADMIN - drop DB
+            VALID_OPS[5] -> { // SAVE
+                // TODO: add save logic
+                val plan: List<Plan>? = getPlanFromDB(connection)
+                savePlanToFile(plan)
+            }
+
+            VALID_OPS[5] -> { // ADMIN - drop DB
                 connection = dropAndCreateDB()
             }
         }
     }
+}
+
+fun savePlanToFile(plan: List<Plan>?) {
+    if (plan == null) {
+        TXT_UNABLE_TO_SAVE_PLAN.let(::println)
+    } else {
+        // TODO: implement logic
+        TXT_PLAN_FILE_SAVED.let(::println)
+    }
+}
+
+fun getPlanFromDB(connection: Connection): List<Plan>? {
+    // todo: implement logic
+    return null
 }
 
 fun addPlanToDB(plan: List<Plan>) {
@@ -135,7 +157,7 @@ fun addMealToDB(meal: Meal, connection: Connection) {
     }
 }
 
-fun getMealsFromDV(connection: Connection, mealCategory: String? = null): List<Meal> {
+fun getMealsFromDB(connection: Connection, mealCategory: String? = null): List<Meal> {
     val statement = connection.createStatement()
     val query = String.format(
         "select * from meals%s", if (mealCategory != null) {
@@ -161,7 +183,7 @@ fun getMealsFromDV(connection: Connection, mealCategory: String? = null): List<M
 
 fun getMealsFromDVbyCategory(connection: Connection): List<Meal> {
     val category = categoryFormatCheck(TXT_CHOOSE_CATEGORY_TO_SHOW, TXT_MEAL_WRONG_CATEGORY)
-    return getMealsFromDV(connection, category)
+    return getMealsFromDB(connection, category)
 }
 
 fun showMeals(meals: List<Meal>) {
@@ -212,7 +234,7 @@ fun ingredientsFormatCheck(): List<String> {
     val regex = "[a-zA-Z ]*".toRegex()
     loop@ while (true) {
         TXT_INPUT_INGREDIENTS.let(::println)
-        val ingredients = readln().split(",").map { it.trim() }
+        val ingredients = readln().split(",").map { it.trim().lowercase() }
         for (i in ingredients) {
             if (!i.matches(regex) || i == "") {
                 TXT_MEAL_WRONG_FORMAT.let(::println)
