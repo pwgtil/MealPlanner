@@ -20,9 +20,9 @@ const val TXT_NO_MEALS = "No meals found."
 const val TXT_CHOOSE_FROM_LIST_ABOVE = "Choose the %s for %s from the list above:"
 const val TXT_MEALS_PLANNED_FOR_DAY = "Yeah! We planned the meals for %s."
 const val TXT_MEAL_DONT_EXIST = "This meal doesn’t exist. Choose a meal from the list above."
-const val TXT_UNABLE_TO_SAVE_PLAN = "This meal doesn’t exist. Choose a meal from the list above."
-const val TXT_PLAN_FILE_SAVED = "This meal doesn’t exist. Choose a meal from the list above."
+const val TXT_UNABLE_TO_SAVE_PLAN = "Unable to save. Plan your meals first."
 const val TXT_INPUT_FILE_NAME = "Input a filename:"
+const val TXT_PLAN_FILE_SAVED = "Saved!"
 val VALID_OPS = listOf("add", "show", "exit", "plan", "save", "admin")
 val VALID_CATEGORIES = listOf("breakfast", "lunch", "dinner")
 val DAYS_OF_WEEK = mapOf(
@@ -65,7 +65,7 @@ fun main() {
                 addPlanToDB(connection, plan)
             }
 
-            VALID_OPS[5] -> { // SAVE
+            VALID_OPS[4] -> { // SAVE
                 val shoppingList = getShoppingListFromDB(connection)
                 savePlanToFile(shoppingList)
             }
@@ -81,7 +81,6 @@ fun savePlanToFile(shoppingList: Map<String, Int>?) {
     if (shoppingList == null) {
         TXT_UNABLE_TO_SAVE_PLAN.let(::println)
     } else {
-        // TODO: implement logic
         TXT_INPUT_FILE_NAME.let(::println)
         val filename = readln()
         val fileContent = StringBuilder()
