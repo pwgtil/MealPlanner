@@ -4,6 +4,9 @@ import java.io.FileWriter
 import java.sql.Connection
 import java.sql.DriverManager
 
+// ---------------------------------------------------------------------------------------------------------------------
+// --MESSAGES-----------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
 const val TXT_CHOSE_OPERATION = "What would you like to do (add, show, plan, save, exit)?"
 const val TXT_CHOOSE_CATEGORY_TO_ADD = "Which meal do you want to add (breakfast, lunch, dinner)?"
 const val TXT_CHOOSE_CATEGORY_TO_SHOW = "Which category do you want to print (breakfast, lunch, dinner)?"
@@ -35,6 +38,9 @@ val DAYS_OF_WEEK = mapOf(
     6 to "Sunday"
 )
 
+// ---------------------------------------------------------------------------------------------------------------------
+// --MENU LOOP IN MAIN--------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
 fun main() {
     var connection = connectDB()
     while (true) {
@@ -77,85 +83,9 @@ fun main() {
     }
 }
 
-fun savePlanToFile(shoppingList: Map<String, Int>?) {
-    if (shoppingList == null) {
-        TXT_UNABLE_TO_SAVE_PLAN.let(::println)
-    } else {
-        TXT_INPUT_FILE_NAME.let(::println)
-        val filename = readln()
-        val fileContent = StringBuilder()
-        shoppingList.forEach {
-            fileContent.append(it.key + if (it.value > 1) " x${it.value}\n" else "\n")
-        }
-        FileWriter(filename).use {
-            it.write(fileContent.toString())
-        }
-        TXT_PLAN_FILE_SAVED.let(::println)
-    }
-}
-
-fun getShoppingListFromDB(connection: Connection): Map<String, Int>? {
-    val statement = connection.createStatement()
-    val planCheckSum =
-        statement.executeQuery("select sum(distinct day_of_week) from plan").getInt("sum(distinct day_of_week)")
-    return if (planCheckSum != 21) {
-        null
-    } else {
-        val ingredientsQuery =
-            statement.executeQuery("select ingredient from ingredients inner join plan on ingredients.meal_id = plan.meal_id")
-        val allIngredients = mutableListOf<String>()
-        while (ingredientsQuery.next()) {
-            allIngredients.add(ingredientsQuery.getString("ingredient"))
-        }
-        allIngredients.groupingBy { it }.eachCount().toSortedMap()
-    }
-}
-
-fun addPlanToDB(connection: Connection, plan: List<Plan>) {
-    val statement = connection.createStatement()
-    statement.executeUpdate("DELETE FROM plan")
-    val values = StringBuilder()
-    plan.forEach { day ->
-        day.meals.forEach { meal ->
-            values.append("(${day.day}, ${meal.id}),")
-        }
-    }
-    statement.executeUpdate("insert into plan (day_of_week, meal_id) values ${values.toString().trim(',')}")
-}
-
-fun showCurrentPlan(plan: List<Plan>) {
-    plan.forEach {
-        DAYS_OF_WEEK[it.day].let(::println)
-        for (i in 0..2) {
-            String.format("%s: %s", VALID_CATEGORIES[i], it.meals[i].name).let(::println)
-        }
-        println()
-    }
-}
-
-fun addPlan(meals: List<Meal>): List<Plan> {
-    val schedule = mutableListOf<Plan>()
-    for (day in DAYS_OF_WEEK) {
-        day.value.let(::println)
-        val plan = Plan(day.key, mutableListOf())
-        for (i in 0..2) {
-            meals.filter { it.category == VALID_CATEGORIES[i] }.sortedBy { it.name }.forEach { it.name.let(::println) }
-            String.format(TXT_CHOOSE_FROM_LIST_ABOVE, VALID_CATEGORIES[i], day.value).let(::println)
-            var selectedMeal: String
-            while (true) {
-                selectedMeal = readln()
-                if (selectedMeal in meals.filter { it.category == VALID_CATEGORIES[i] }.map { it.name })
-                    break
-                TXT_MEAL_DONT_EXIST.let(::println)
-            }
-            plan.meals.add(meals.find { it.name == selectedMeal && it.category == VALID_CATEGORIES[i] }!!) // assured above
-        }
-        schedule.add(plan)
-        String.format(TXT_MEALS_PLANNED_FOR_DAY, day.value).let(::println).also { println() }
-    }
-    return schedule.toList()
-}
-
+// ---------------------------------------------------------------------------------------------------------------------
+// --DB CONNECTION SETUP------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
 fun connectDB(): Connection {
     val connection = DriverManager.getConnection("jdbc:sqlite:meals.db")
     val statement = connection.createStatement()
@@ -177,12 +107,64 @@ fun dropAndCreateDB(): Connection {
     return connection
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// --OUTPUT HANDLING TO DB OR FILE--------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+fun savePlanToFile(shoppingList: Map<String, Int>?) {
+    if (shoppingList == null) {
+        TXT_UNABLE_TO_SAVE_PLAN.let(::println)
+    } else {
+        TXT_INPUT_FILE_NAME.let(::println)
+        val filename = readln()
+        val fileContent = StringBuilder()
+        shoppingList.forEach {
+            fileContent.append(it.key + if (it.value > 1) " x${it.value}\n" else "\n")
+        }
+        FileWriter(filename).use {
+            it.write(fileContent.toString())
+        }
+        TXT_PLAN_FILE_SAVED.let(::println)
+    }
+}
+
+fun addPlanToDB(connection: Connection, plan: List<Plan>) {
+    val statement = connection.createStatement()
+    statement.executeUpdate("DELETE FROM plan")
+    val values = StringBuilder()
+    plan.forEach { day ->
+        day.meals.forEach { meal ->
+            values.append("(${day.day}, ${meal.id}),")
+        }
+    }
+    statement.executeUpdate("insert into plan (day_of_week, meal_id) values ${values.toString().trim(',')}")
+}
+
 fun addMealToDB(meal: Meal, connection: Connection) {
     val statement = connection.createStatement()
     val lastID = statement.executeQuery("select max(meal_id) from meals").getInt("max(meal_id)")
     statement.executeUpdate("insert into meals values(${lastID + 1}, '${meal.category}', '${meal.name}')")
     meal.ingredients.forEachIndexed { i, s ->
         statement.executeUpdate("insert into ingredients values('${s}', '$i', ${lastID + 1})")
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// --INPUT HANDLING FROM DB---------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+fun getShoppingListFromDB(connection: Connection): Map<String, Int>? {
+    val statement = connection.createStatement()
+    val planCheckSum =
+        statement.executeQuery("select sum(distinct day_of_week) from plan").getInt("sum(distinct day_of_week)")
+    return if (planCheckSum != 21) {
+        null
+    } else {
+        val ingredientsQuery =
+            statement.executeQuery("select ingredient from ingredients inner join plan on ingredients.meal_id = plan.meal_id")
+        val allIngredients = mutableListOf<String>()
+        while (ingredientsQuery.next()) {
+            allIngredients.add(ingredientsQuery.getString("ingredient"))
+        }
+        allIngredients.groupingBy { it }.eachCount().toSortedMap()
     }
 }
 
@@ -215,6 +197,19 @@ fun getMealsFromDVbyCategory(connection: Connection): List<Meal> {
     return getMealsFromDB(connection, category)
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// --VIEW HANDLING INPUT/OUTPUT-----------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+fun showCurrentPlan(plan: List<Plan>) {
+    plan.forEach {
+        DAYS_OF_WEEK[it.day].let(::println)
+        for (i in 0..2) {
+            String.format("%s: %s", VALID_CATEGORIES[i], it.meals[i].name).let(::println)
+        }
+        println()
+    }
+}
+
 fun showMeals(meals: List<Meal>) {
     if (meals.isEmpty()) {
         TXT_NO_MEALS.let(::println)
@@ -240,6 +235,32 @@ fun addMeal(): Meal {
     return Meal(category, name, ingredients)
 }
 
+fun addPlan(meals: List<Meal>): List<Plan> {
+    val schedule = mutableListOf<Plan>()
+    for (day in DAYS_OF_WEEK) {
+        day.value.let(::println)
+        val plan = Plan(day.key, mutableListOf())
+        for (i in 0..2) {
+            meals.filter { it.category == VALID_CATEGORIES[i] }.sortedBy { it.name }.forEach { it.name.let(::println) }
+            String.format(TXT_CHOOSE_FROM_LIST_ABOVE, VALID_CATEGORIES[i], day.value).let(::println)
+            var selectedMeal: String
+            while (true) {
+                selectedMeal = readln()
+                if (selectedMeal in meals.filter { it.category == VALID_CATEGORIES[i] }.map { it.name })
+                    break
+                TXT_MEAL_DONT_EXIST.let(::println)
+            }
+            plan.meals.add(meals.find { it.name == selectedMeal && it.category == VALID_CATEGORIES[i] }!!) // assured above
+        }
+        schedule.add(plan)
+        String.format(TXT_MEALS_PLANNED_FOR_DAY, day.value).let(::println).also { println() }
+    }
+    return schedule.toList()
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// --USER INPUT FORMAT CHECKS-------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
 fun categoryFormatCheck(message: String, errorMsg: String): String {
     while (true) {
         message.let(::println)
@@ -274,5 +295,8 @@ fun ingredientsFormatCheck(): List<String> {
     }
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// --DATA CLASSES-------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
 data class Meal(val category: String, val name: String, val ingredients: List<String>, val id: Int = Int.MAX_VALUE)
 data class Plan(val day: Int, val meals: MutableList<Meal>)
